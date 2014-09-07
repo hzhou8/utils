@@ -13,7 +13,6 @@ REF_SUFFIX = ']'
 class ListItemBase(object):
 
     def __init__(self, values=None):
-        print 'this is base'
         self.value_set = values
         self.pos = -1
 
@@ -89,10 +88,8 @@ class WikiRef(object):
             return i
 
     def check_anchor(self, line):
-        print len(ANCHOR_PREFIX)
         level = self.level
         anchor_end = level + len(ANCHOR_PREFIX)
-        print line[level:anchor_end]
         if line[level:anchor_end] == ANCHOR_PREFIX:
             i = anchor_end
             while line[i] != ANCHOR_SUFFIX:
@@ -111,15 +108,11 @@ class WikiRef(object):
 
     def replace_anchor(self, anchor, buf):
         anchor_str = ANCHOR_PREFIX + anchor + ANCHOR_SUFFIX
-        print buf
-        print 'remove ' + anchor_str
         buf = buf.replace(anchor_str, '')
-        print buf
         ref_str = REF_PREFIX + anchor + REF_SUFFIX
         id = self.get_id()
-        print 'replace ' + ref_str + ' by ' + id
         buf = buf.replace(ref_str, id)
-        print buf
+
         return buf
 
     def proc_file(self):
@@ -132,13 +125,10 @@ class WikiRef(object):
                 if not level:
                     continue
 
-                print self.cur_id[level]
                 if level <= self.level:
                     self.cur_id[level].inc()
-                    #getattr(self.cur_id[level], 'inc')()
                 else:
                     self.cur_id[level].reset()
-                    #getattr(self.cur_id[level], 'reset')()
 
                 self.level = level
 
@@ -147,7 +137,6 @@ class WikiRef(object):
                     continue
 
                 buf = self.replace_anchor(anchor, buf)
-                print buf
 
             with file(self.filename + '.out', 'w+') as f_out:
                 f_out.write(buf)
