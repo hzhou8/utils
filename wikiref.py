@@ -17,20 +17,26 @@ class ListItemBase(object):
         self.pos = -1
 
     def inc(self):
-        if self.pos == -1:
-            self.reset()
-            return
-
         self.pos = self.pos + 1
         if self.pos >= len(self.value_set):
             raise Exception('Too many items in this list: %d' % self.pos)
 
     def reset(self):
-        self.pos = 0
+        self.pos = -1
 
 
     def get(self):
         return self.value_set[self.pos]
+
+class ListItemNone(ListItemBase):
+    def inc(self):
+        pass
+
+    def reset(self):
+        pass
+
+    def get(self):
+        pass
 
 class ListItemNum(ListItemBase):
 
@@ -42,7 +48,7 @@ class ListItemNum(ListItemBase):
         self.value = self.value + 1
 
     def reset(self):
-        self.value = 1
+        self.value = 0
 
     def get(self):
         return self.value
@@ -73,7 +79,10 @@ class WikiRef(object):
         self.level = 0
         self.filename = filename
         self.cur_id = [
-            None,
+            ListItemNone(),
+            ListItemNum(),
+            ListItemABC(),
+            ListItemIII(),
             ListItemNum(),
             ListItemABC(),
             ListItemIII()
@@ -86,6 +95,13 @@ class WikiRef(object):
 
         if i > 0:
             return i
+        else:
+            i = 0
+            while (line[i] == ' '
+                   or line[i] == '\t'):
+                i = i + 1
+            if line[i] == '\n':
+                return 0
 
     def check_anchor(self, line):
         level = self.level
@@ -122,13 +138,18 @@ class WikiRef(object):
             f.seek(0)
             for line in f:
                 level = self.check_level(line)
-                if not level:
+                if level is None:
                     continue
 
-                if level <= self.level:
+                if level == self.level:
                     self.cur_id[level].inc()
+                elif level < self.level:
+                    self.cur_id[level].inc()
+                    for l in range(level + 1, self.level + 1):
+                        self.cur_id[self.level].reset()
                 else:
                     self.cur_id[level].reset()
+                    self.cur_id[level].inc()
 
                 self.level = level
 
