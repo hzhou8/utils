@@ -9,6 +9,7 @@ ANCHOR_PREFIX = '[anchor:'
 ANCHOR_SUFFIX = ']'
 REF_PREFIX = '[ref:'
 REF_SUFFIX = ']'
+LINE_BREAK = '-'
 
 class ListItemBase(object):
 
@@ -89,19 +90,20 @@ class WikiRef(object):
         ]
 
     def check_level(self, line):
+        if not line.strip():
+            return None
+
+        if not line.strip(LINE_BREAK).strip():
+            return 0
+
         i = 0
         while line[i] == NUM_CHAR:
             i = i + 1
 
         if i > 0:
             return i
-        else:
-            i = 0
-            while (line[i] == ' '
-                   or line[i] == '\t'):
-                i = i + 1
-            if line[i] == '\n':
-                return 0
+
+        return None
 
     def check_anchor(self, line):
         level = self.level
@@ -131,8 +133,24 @@ class WikiRef(object):
 
         return buf
 
+    def post_proc(self, buf):
+        """
+        remove all empty lines
+        replace '---' to line breaks
+        """
+        lines = []
+        for line in buf.splitlines():
+            if not line.strip():
+                continue
+            if not line.strip(LINE_BREAK):
+                lines.append('\n')
+                continue
+            lines.append(line + '\n')
+        return lines
+
     def proc_file(self):
 
+        buf = ''
         with file(self.filename, 'r') as f:
             buf = f.read()
             f.seek(0)
@@ -156,11 +174,11 @@ class WikiRef(object):
                 anchor = self.check_anchor(line)
                 if not anchor:
                     continue
-
                 buf = self.replace_anchor(anchor, buf)
 
-            with file(self.filename + '.out', 'w+') as f_out:
-                f_out.write(buf)
+        lines = self.post_proc(buf)
+        with file(self.filename + '.out', 'w+') as f_out:
+            f_out.writelines(lines)
 
 
 def main(argv):
