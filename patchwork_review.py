@@ -3,12 +3,15 @@
 import sys
 import tempfile
 import subprocess
+from shutil import copyfile
 
 def commit_patch(msg, body):
     with tempfile.NamedTemporaryFile() as f:
         f.write(body)
         f.flush()
-        subprocess.check_output('git apply %s' % f.name, shell=True)
+        if subprocess.call('git apply %s' % f.name, shell=True) != 0:
+            copyfile(f.name, '/tmp/failed_patch')
+            raise Exception("git apply failed")
         # TODO: escape special characters such as " ' in msg
         # TODO: handle new/deleted files
         subprocess.check_output('git add -u; git commit -m "%s"' % msg,
