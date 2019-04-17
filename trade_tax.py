@@ -113,18 +113,86 @@ def process_trade(data, i, q, dryrun):
     return q
 
 
+def find_btc(data, i, q, dryrun):
+    ''' Process a portion of quantity "q" for i-th record.
+    :param data:
+    :param i:
+    :param q:
+    :param dryrun:
+    :return: the quantity that should be split for processing, or q if no splitting needed.
+    '''
+    r = data[i]
+    assert r['type'] == TYPE_SS
+
+    sub = {
+        'parent': r,
+        'q': q,
+        'next': None,
+        'prev': None,
+        'amount': q * r['price']
+    }
+    prev_sub = sub
+    if not dryrun:
+        r['remain_q'] -= q
+        if not r['remain_q']:
+            sub['amount'] = r['amount'] - (r['quantity'] - q) * r['price']
+        #print "process %s: q = %s, remain_q = %s" % (r['date'], q, r['remain_q'])
+        r['sub'].append(sub)
+
+    for j in range(i + 1, len(data)):
+        rj = data[j]
+        if rj['remain_q'] == 0:
+            continue
+
+        if rj['type'] == TYPE_SS:
+            continue
+
+        if rj['remain_q'] < q:
+            return rj['remain_q']
+
+        sub = {
+            'parent': rj,
+            'q': q,
+            'next': None,
+            'prev': prev_sub,
+            'amount': q * rj['price']
+        }
+        if not dryrun:
+            rj['remain_q'] -= q
+            if not rj['remain_q']:
+                sub['amount'] = rj['amount'] - (rj['quantity'] - q) * rj['price']
+            prev_sub['next'] = sub
+            rj['sub'].append(sub)
+
+        return q
+
+    return q
+
+
 def print_sub(sub, total_gain):
     p = sub['parent']
     prev = sub['prev']
-    print(p['date'], p['type'], "%s/%s" % (sub['q'], p['quantity']), p['price'], sub['q'] * p['price'])
+    #amount = sub['q'] * p['price']
+    #if p['type'] == TYPE_SS:
+    #    commission = sub['q'] * 10 * 0.1 / p['quantity'] * (4.95)
+    #    amount -= commission
+    #else:
+    #    commission = sub['q'] * 10 * 0.1 / p['quantity'] * (4.95)
+    #    amount += commission
+    #amount = round(amount * 100) / 100
+    #print(p['date'], p['type'], "%s/%s" % (sub['q'], p['quantity']), p['price'], amount)
     if p['type'] == TYPE_BTC:
         assert prev
-        print("acquired at: %s, cost basis: %s, wash: %s, gain/loss: %s" %
-              (prev['parent']['date'],
-               prev['parent']['price'] * sub['q'],
-               "yes" if sub['next'] else "No",
-               (prev['parent']['price'] - p['price']) * sub['q']))
-        return total_gain + (prev['parent']['price'] - p['price']) * sub['q']
+        #prev_commission = sub['q'] * 10 * 0.1 / prev['parent']['quantity'] * (4.95)
+        #prev_amount = prev['parent']['price'] * sub['q'] - prev_commission
+        #prev_amount = round(prev_amount * 100) / 100
+
+        print("UVXY short %d,%s,%s,%s,%s,,,%s" %
+              (sub['q'], prev['parent']['date'], p['date'], sub['amount'],
+               sub['prev']['amount'],
+               #"yes" if sub['next'] else "No",
+               sub['prev']['amount'] - sub['amount']))
+        return total_gain + sub['prev']['amount'] - sub['amount']
     return total_gain
 
 def main(argv):
@@ -146,7 +214,7 @@ def main(argv):
             record['quantity'] = int(r[5])
             record['price'] = float(r[6])
             record['commission'] = r[7]
-            record['amount'] = r[8]
+            record['amount'] = float(r[8])
             if (record['type'] in [TYPE_BTC, TYPE_SS] and
                 record['security'] == "UVXY"):
                 data.append(record)
@@ -161,17 +229,18 @@ def main(argv):
         if r['type'] == TYPE_BTC and r['remain_q']:
             raise Exception("Type %s shouldn't have remain quantity. Row %s" % (TYPE_BTC, r))
 
-        sub_q = r['remain_q']
         while (r['remain_q'] > 0):
-            ret_q = process_trade(data, i, sub_q, True)
-            assert ret_q <= sub_q
-            if ret_q < sub_q:
-                sub_q = ret_q
-                continue
+            ret_q = 0
+            sub_q = r['remain_q']
+            while ret_q < sub_q:
+                sub_q = ret_q if ret_q else r['remain_q']
+                ret_q = find_btc(data, i, sub_q, True)
+                assert ret_q <= sub_q
 
-            ret_q = process_trade(data, i, sub_q, False)
+            ret_q = find_btc(data, i, sub_q, False)
             assert ret_q == sub_q
 
+    print "Description,Date Acquired,Date sold,Proceeds,Cost basis,Code,Adjustment,Gain or loss"
     count = 0
     btc_count = 0
     total_gain = 0
@@ -179,7 +248,7 @@ def main(argv):
         r = data[i]
         for sub in r['sub']:
             if not sub['prev']:
-                print "**************"
+                #print "**************"
                 total_gain = print_sub(sub, total_gain)
                 while sub['next']:
                     sub = sub['next']
@@ -187,10 +256,32 @@ def main(argv):
                         btc_count += 1
                     total_gain = print_sub(sub, total_gain)
                 count += 1
-                print "===========%s" % count
+                #print "===========%s" % count
 
-    print btc_count
-    print total_gain
+    #print btc_count
+    #print total_gain
+
+    balance = 0
+    balance_q = 0
+    count = 0
+    total_btc = 0
+    total_ss = 0
+    for r in data:
+        amount = r['amount']
+        q = r['quantity']
+        if r['type'] == TYPE_BTC:
+            amount = -amount
+            q = -q
+            total_btc += amount
+        else:
+            total_ss += amount
+
+        balance += amount
+        balance_q += q
+        count += 1
+
+
+    #print(count, balance, balance_q, total_btc, total_ss)
 
 if __name__ == '__main__':
     main(sys.argv)
